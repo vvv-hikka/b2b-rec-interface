@@ -1,12 +1,5 @@
 <template>
   <div class="api-interface">
-    <!-- Role Selection -->
-    <div class="role-selector">
-      <button @click="setRole('admin')" :class="{ active: currentRole === 'admin' }">Admin</button>
-      <button @click="setRole('supplier')" :class="{ active: currentRole === 'supplier' }">Supplier</button>
-      <button @click="setRole('customer')" :class="{ active: currentRole === 'customer' }">Customer</button>
-    </div>
-
     <!-- Auth Section -->
     <div class="auth-section">
       <div class="auth-tabs">
@@ -66,6 +59,13 @@
       </div>
     </div>
 
+    <!-- Role Selection -->
+    <div class="role-selector">
+      <button @click="setRole('admin')" :class="{ active: currentRole === 'admin' }">Admin</button>
+      <button @click="setRole('supplier')" :class="{ active: currentRole === 'supplier' }">Supplier</button>
+      <button @click="setRole('customer')" :class="{ active: currentRole === 'customer' }">Customer</button>
+    </div>
+
     <!-- Admin Interface -->
     <div v-if="currentRole === 'admin'" class="role-interface">
       <div class="tab-buttons">
@@ -75,32 +75,91 @@
         <button @click="adminTab = 'recommendations'" :class="{ active: adminTab === 'recommendations' }">Recommendations</button>
       </div>
 
-      <!-- Users Management -->
+      <!-- User Management -->
       <div v-if="adminTab === 'users'" class="tab-content">
+        <!-- Get All Users -->
         <div class="endpoint">
           <h3>Get All Users</h3>
           <div class="form-group">
-            <label>Query Parameters:</label>
-            <input v-model="adminUsersQuery" placeholder="?role=customer">
+            <label>Filter by Role:</label>
+            <select v-model="adminUsersFilter">
+              <option value="">All</option>
+              <option value="admin">Admin</option>
+              <option value="supplier">Supplier</option>
+              <option value="customer">Customer</option>
+            </select>
           </div>
           <button @click="adminGetUsers" class="action-button">Get Users</button>
-          <div class="response">{{ adminUsersResponse }}</div>
+          <div class="response">
+            <pre>{{ adminUsersResponse }}</pre>
+          </div>
+          <button @click="adminGetUsers" class="action-button">Search Users</button>
+          <div class="response">
+            <table class="data-table" v-if="adminUsersResponse.results">
+              <thead>
+                <tr>
+                  <th @click="sortUsers('id')">ID</th>
+                  <th @click="sortUsers('email')">Email</th>
+                  <th @click="sortUsers('name')">Name</th>
+                  <th @click="sortUsers('role')">Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="user in adminUsersResponse.results" :key="user.id">
+                  <td>{{ user.id }}</td>
+                  <td>{{ user.email }}</td>
+                  <td>{{ user.name }}</td>
+                  <td>{{ user.role }}</td>
+                  <td>
+                    <button @click="loadUserForEdit(user)" class="small-button">Edit</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ adminUsersResponse }}</pre>
+          </div>
         </div>
 
-        <div class="endpoint">
-          <h3>Update User</h3>
-          <div class="form-group">
-            <label>User ID:</label>
-            <input v-model="adminUpdateUserId" type="number">
+        <!-- Update User -->
+        <div class="endpoint" v-if="currentEditUser">
+          <h3>Edit User: {{ currentEditUser.email }}</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email:</label>
+              <input v-model="currentEditUser.email" type="email">
+            </div>
+            <div class="form-group">
+              <label>Name:</label>
+              <input v-model="currentEditUser.name">
+            </div>
           </div>
-          <div class="form-group">
-            <label>Update Data (JSON):</label>
-            <textarea v-model="adminUpdateUserData" placeholder='{"is_active": true, "role": "admin"}'></textarea>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Role:</label>
+              <select v-model="currentEditUser.role">
+                <option value="admin">Admin</option>
+                <option value="supplier">Supplier</option>
+                <option value="customer">Customer</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Status:</label>
+              <div class="checkbox-group">
+                <label><input v-model="currentEditUser.is_active" type="checkbox"> Active</label>
+                <label><input v-model="currentEditUser.is_staff" type="checkbox"> Staff</label>
+                <label><input v-model="currentEditUser.is_superuser" type="checkbox"> Superuser</label>
+              </div>
+            </div>
           </div>
-          <button @click="adminUpdateUser" class="action-button">Update User</button>
+          <div class="button-group">
+            <button @click="adminUpdateUser" class="action-button">Save Changes</button>
+            <button @click="cancelEdit" class="action-button secondary">Cancel</button>
+          </div>
           <div class="response">{{ adminUpdateUserResponse }}</div>
         </div>
 
+        <!-- Delete User -->
         <div class="endpoint">
           <h3>Delete User</h3>
           <div class="form-group">
@@ -114,40 +173,142 @@
 
       <!-- Orders Management -->
       <div v-if="adminTab === 'orders'" class="tab-content">
+        <!-- Order Filters -->
         <div class="endpoint">
-          <h3>Get All Orders</h3>
-          <div class="form-group">
-            <label>Query Parameters:</label>
-            <input v-model="adminOrdersQuery" placeholder="?status=pending">
+          <h3>Order Management</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Status:</label>
+              <select v-model="adminOrdersFilter.status">
+                <option value="">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Customer ID:</label>
+              <input v-model="adminOrdersFilter.customer_id" type="number" placeholder="Filter by customer">
+            </div>
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="adminOrdersFilter.okpd2">
+                <option value="">All Categories</option>
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
           </div>
-          <button @click="adminGetOrders" class="action-button">Get Orders</button>
-          <div class="response">{{ adminOrdersResponse }}</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Delivery Region:</label>
+              <select v-model="adminOrdersFilter.delivery_region">
+                <option value="">All Regions</option>
+                <option v-for="region in deliveryRegions" :value="region">{{ region }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Law Type:</label>
+              <select v-model="adminOrdersFilter.law_type">
+                <option value="">All Types</option>
+                <option value="44_FZ">44-ФЗ</option>
+                <option value="223_FZ">223-ФЗ</option>
+              </select>
+            </div>
+          </div>
+          <button @click="adminGetOrders" class="action-button">Search Orders</button>
+          
+          <!-- Orders Table -->
+          <div class="response">
+            <table class="data-table" v-if="adminOrdersResponse.results">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Customer</th>
+                  <th>OKPD2</th>
+                  <th>Amount</th>
+                  <th>Region</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="order in adminOrdersResponse.results" :key="order.id">
+                  <td>{{ order.id }}</td>
+                  <td>{{ order.customer.email }} (ID: {{ order.customer.id }})</td>
+                  <td>{{ order.okpd2 }}</td>
+                  <td>{{ order.contract_amount }}</td>
+                  <td>{{ order.delivery_region }}</td>
+                  <td>{{ order.status }}</td>
+                  <td>
+                    <button @click="loadOrderForEdit(order)" class="small-button">Edit</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ adminOrdersResponse }}</pre>
+          </div>
         </div>
 
-        <div class="endpoint">
-          <h3>Create Order</h3>
-          <div class="form-group">
-            <label>Order Data (JSON):</label>
-            <textarea v-model="adminCreateOrderData" placeholder='{"product": "Laptop", "quantity": 2, "customer_id": 1}'></textarea>
+        <!-- Order Edit Form (Pre-filled) -->
+        <div class="endpoint" v-if="currentEditOrder">
+          <h3>Edit Order #{{ currentEditOrder.id }}</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Customer ID:</label>
+              <input v-model="currentEditOrder.customer.id" type="number" disabled>
+            </div>
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="currentEditOrder.okpd2">
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
           </div>
-          <button @click="adminCreateOrder" class="action-button">Create Order</button>
-          <div class="response">{{ adminCreateOrderResponse }}</div>
-        </div>
-
-        <div class="endpoint">
-          <h3>Update Order</h3>
           <div class="form-group">
-            <label>Order ID:</label>
-            <input v-model="adminUpdateOrderId" type="number">
+            <label>Description:</label>
+            <textarea v-model="currentEditOrder.description"></textarea>
           </div>
-          <div class="form-group">
-            <label>Update Data (JSON):</label>
-            <textarea v-model="adminUpdateOrderData" placeholder='{"status": "completed"}'></textarea>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Contract Amount:</label>
+              <input v-model="currentEditOrder.contract_amount" type="number" step="0.01">
+            </div>
+            <div class="form-group">
+              <label>Delivery Region:</label>
+              <select v-model="currentEditOrder.delivery_region">
+                <option v-for="region in deliveryRegions" :value="region">{{ region }}</option>
+              </select>
+            </div>
           </div>
-          <button @click="adminUpdateOrder" class="action-button">Update Order</button>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Law Type:</label>
+              <select v-model="currentEditOrder.law_type">
+                <option value="44_FZ">44-ФЗ</option>
+                <option value="223_FZ">223-ФЗ</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Status:</label>
+              <select v-model="currentEditOrder.status">
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+          <div class="button-group">
+            <button @click="adminUpdateOrder" class="action-button">Save Changes</button>
+            <button @click="cancelEdit" class="action-button secondary">Cancel</button>
+          </div>
           <div class="response">{{ adminUpdateOrderResponse }}</div>
         </div>
 
+        <!-- Delete Order -->
         <div class="endpoint">
           <h3>Delete Order</h3>
           <div class="form-group">
@@ -161,40 +322,201 @@
 
       <!-- Suppliers Management -->
       <div v-if="adminTab === 'suppliers'" class="tab-content">
+        <!-- Get All Suppliers -->
         <div class="endpoint">
           <h3>Get All Suppliers</h3>
-          <div class="form-group">
-            <label>Query Parameters:</label>
-            <input v-model="adminSuppliersQuery" placeholder="?is_verified=true">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Verification:</label>
+              <select v-model="adminSuppliersFilter.is_verified">
+                <option value="">All</option>
+                <option value="true">Verified</option>
+                <option value="false">Unverified</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKFS:</label>
+              <select v-model="adminSuppliersFilter.okfs">
+                <option value="">All OKFS</option>
+                <option v-for="(label, value) in okfsChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKOPF:</label>
+              <select v-model="adminSuppliersFilter.okopf">
+                <option value="">All OKOPF</option>
+                <option v-for="(label, value) in okopfChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Search:</label>
+              <input v-model="adminSuppliersFilter.search" placeholder="Name, INN, or OGRN">
+            </div>
+            <div class="form-group">
+              <label>Risk Level:</label>
+              <select v-model="adminSuppliersFilter.risk_level">
+                <option value="">All</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
           </div>
           <button @click="adminGetSuppliers" class="action-button">Get Suppliers</button>
-          <div class="response">{{ adminSuppliersResponse }}</div>
+          <div class="response">
+            <table class="data-table" v-if="adminSuppliersResponse.results">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>INN</th>
+                  <th>OKFS</th>
+                  <th>Risk</th>
+                  <th>Verified</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="supplier in adminSuppliersResponse.results" :key="supplier.id">
+                  <td>{{ supplier.id }}</td>
+                  <td>{{ supplier.full_name }}</td>
+                  <td>{{ supplier.inn }}</td>
+                  <td>{{ supplier.okfs }}</td>
+                  <td :class="`risk-${supplier.index_due_diligence_word?.toLowerCase() || 'unknown'}`">
+                    {{ supplier.index_due_diligence_word || 'N/A' }}
+                  </td>
+                  <td>{{ supplier.is_verified ? '✓' : '✗' }}</td>
+                  <td>
+                    <button @click="loadSupplierForEdit(supplier)" class="small-button">Edit</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ adminSuppliersResponse }}</pre>
+          </div>
         </div>
 
+        <!-- Update Supplier -->
+        <div class="endpoint" v-if="currentEditSupplier">
+          <h3>Edit Supplier: {{ currentEditSupplier.full_name }}</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Full Name:</label>
+              <input v-model="currentEditSupplier.full_name">
+            </div>
+            <div class="form-group">
+              <label>Short Name:</label>
+              <input v-model="currentEditSupplier.short_name">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>INN:</label>
+              <input v-model="currentEditSupplier.inn" maxlength="12">
+            </div>
+            <div class="form-group">
+              <label>OGRN:</label>
+              <input v-model="currentEditSupplier.ogrn" maxlength="15">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKFS:</label>
+              <select v-model="currentEditSupplier.okfs">
+                <option v-for="(label, value) in okfsChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKOPF:</label>
+              <select v-model="currentEditSupplier.okopf">
+                <option v-for="(label, value) in okopfChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Email:</label>
+              <input v-model="currentEditSupplier.email" type="email">
+            </div>
+            <div class="form-group">
+              <label>Leader:</label>
+              <input v-model="currentEditSupplier.leader">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Categories (OKPD2):</label>
+            <input v-model="currentEditSupplier.okpd2_categories" placeholder="Comma-separated codes">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Verified:</label>
+              <input v-model="currentEditSupplier.is_verified" type="checkbox">
+            </div>
+            <div class="form-group">
+              <label>Due Diligence Index:</label>
+              <input v-model="currentEditSupplier.index_due_diligence" type="number" min="1" max="99">
+              <span v-if="currentEditSupplier.index_due_diligence">
+                ({{ currentEditSupplier.index_due_diligence_word }})
+              </span>
+            </div>
+          </div>
+          <div class="button-group">
+            <button @click="adminUpdateSupplier" class="action-button">Save Changes</button>
+            <button @click="cancelEdit" class="action-button secondary">Cancel</button>
+            <button @click="adminDeleteSupplier" class="action-button delete" 
+                    v-if="currentEditSupplier.id">Delete Supplier</button>
+          </div>
+          <div class="response">{{ adminUpdateSupplierResponse }}</div>
+        </div>
+
+        <!-- Create Supplier -->
         <div class="endpoint">
           <h3>Create Supplier</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>User ID:</label>
+              <input v-model="adminCreateSupplierUserId" type="number">
+            </div>
+            <div class="form-group">
+              <label>Full Name:</label>
+              <input v-model="adminCreateSupplierFullName">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>INN:</label>
+              <input v-model="adminCreateSupplierInn" maxlength="12">
+            </div>
+            <div class="form-group">
+              <label>OGRN:</label>
+              <input v-model="adminCreateSupplierOgrn" maxlength="15">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKFS:</label>
+              <select v-model="adminCreateSupplierOkfs">
+                <option v-for="(label, value) in okfsChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKOPF:</label>
+              <select v-model="adminCreateSupplierOkopf">
+                <option v-for="(label, value) in okopfChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+          </div>
           <div class="form-group">
-            <label>Supplier Data (JSON):</label>
-            <textarea v-model="adminCreateSupplierData" placeholder='{"name": "New Supplier", "email": "supplier@example.com"}'></textarea>
+            <label>OKPD2 Categories (comma-separated):</label>
+            <input v-model="adminCreateSupplierOkpd2">
           </div>
           <button @click="adminCreateSupplier" class="action-button">Create Supplier</button>
           <div class="response">{{ adminCreateSupplierResponse }}</div>
         </div>
 
-        <div class="endpoint">
-          <h3>Update Supplier</h3>
-          <div class="form-group">
-            <label>Supplier ID:</label>
-            <input v-model="adminUpdateSupplierId" type="number">
-          </div>
-          <div class="form-group">
-            <label>Update Data (JSON):</label>
-            <textarea v-model="adminUpdateSupplierData" placeholder='{"is_verified": true}'></textarea>
-          </div>
-          <button @click="adminUpdateSupplier" class="action-button">Update Supplier</button>
-          <div class="response">{{ adminUpdateSupplierResponse }}</div>
-        </div>
-
+        <!-- Delete Supplier -->
         <div class="endpoint">
           <h3>Delete Supplier</h3>
           <div class="form-group">
@@ -221,8 +543,14 @@
               <option value="fast">Fast</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>Top Only:</label>
+            <input v-model="adminRecommendationTopOnly" type="checkbox">
+          </div>
           <button @click="adminGetRecommendations" class="action-button">Get Recommendations</button>
-          <div class="response">{{ adminRecommendationsResponse }}</div>
+          <div class="response">
+            <pre>{{ adminRecommendationsResponse }}</pre>
+          </div>
         </div>
       </div>
     </div>
@@ -306,7 +634,6 @@
       </div>
     </div>
 
-    <!-- Customer Interface -->
     <div v-if="currentRole === 'customer' && authToken" class="role-interface">
       <div class="tab-buttons">
         <button @click="customerTab = 'orders'" :class="{ active: customerTab === 'orders' }">Orders</button>
@@ -316,92 +643,319 @@
 
       <!-- Orders Management -->
       <div v-if="customerTab === 'orders'" class="tab-content">
+        <!-- Get All Orders -->
         <div class="endpoint">
           <h3>Get My Orders</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Status:</label>
+              <select v-model="customerOrdersFilter.status">
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="customerOrdersFilter.okpd2">
+                <option value="">All</option>
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
+          </div>
           <button @click="customerGetOrders" class="action-button">Get Orders</button>
-          <div class="response">{{ customerOrdersResponse }}</div>
+          <div class="response">
+            <table class="data-table" v-if="customerOrdersResponse.results">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>OKPD2</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Region</th>
+                  <th>Law Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="order in customerOrdersResponse.results" :key="order.id">
+                  <td>{{ order.id }}</td>
+                  <td>{{ order.okpd2 }}</td>
+                  <td>{{ order.description }}</td>
+                  <td>{{ order.contract_amount }}</td>
+                  <td>{{ order.delivery_region }}</td>
+                  <td>{{ order.law_type }}</td>
+                  <td>
+                    <button @click="loadCustomerOrderForEdit(order)" class="small-button">Edit</button>
+                    <button @click="confirmDeleteOrder(order.id)" class="small-button delete">Delete</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ customerOrdersResponse }}</pre>
+          </div>
         </div>
 
+        <!-- Create Order -->
         <div class="endpoint">
           <h3>Create Order</h3>
-          <div class="form-group">
-            <label>Product:</label>
-            <input v-model="customerOrderProduct">
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="customerCreateOrderData.okpd2">
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Law Type:</label>
+              <select v-model="customerCreateOrderData.law_type">
+                <option value="44_FZ">44-ФЗ</option>
+                <option value="223_FZ">223-ФЗ</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
-            <label>Quantity:</label>
-            <input v-model="customerOrderQuantity" type="number">
+            <label>Description:</label>
+            <textarea v-model="customerCreateOrderData.description" placeholder="Detailed order description"></textarea>
           </div>
-          <div class="form-group">
-            <label>Delivery Date:</label>
-            <input v-model="customerOrderDeliveryDate" type="date">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Contract Amount:</label>
+              <input v-model="customerCreateOrderData.contract_amount" type="number" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-group">
+              <label>Delivery Region:</label>
+              <select v-model="customerCreateOrderData.delivery_region">
+                <option v-for="region in deliveryRegions" :value="region">{{ region }}</option>
+              </select>
+            </div>
           </div>
           <button @click="customerCreateOrder" class="action-button">Create Order</button>
           <div class="response">{{ customerCreateOrderResponse }}</div>
         </div>
 
-        <div class="endpoint">
-          <h3>Update Order</h3>
-          <div class="form-group">
-            <label>Order ID:</label>
-            <input v-model="customerUpdateOrderId" type="number">
+        <!-- Edit Order -->
+        <div class="endpoint" v-if="customerCurrentEditOrder">
+          <h3>Edit Order #{{ customerCurrentEditOrder.id }}</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="customerCurrentEditOrder.okpd2">
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Law Type:</label>
+              <select v-model="customerCurrentEditOrder.law_type">
+                <option value="44_FZ">44-ФЗ</option>
+                <option value="223_FZ">223-ФЗ</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
-            <label>Update Data:</label>
-            <textarea v-model="customerUpdateOrderData" placeholder='{"quantity": 3}'></textarea>
+            <label>Description:</label>
+            <textarea v-model="customerCurrentEditOrder.description"></textarea>
           </div>
-          <button @click="customerUpdateOrder" class="action-button">Update Order</button>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Contract Amount:</label>
+              <input v-model="customerCurrentEditOrder.contract_amount" type="number" step="0.01">
+            </div>
+            <div class="form-group">
+              <label>Delivery Region:</label>
+              <select v-model="customerCurrentEditOrder.delivery_region">
+                <option v-for="region in deliveryRegions" :value="region">{{ region }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="button-group">
+            <button @click="customerUpdateOrder" class="action-button">Save Changes</button>
+            <button @click="cancelCustomerEdit" class="action-button secondary">Cancel</button>
+          </div>
           <div class="response">{{ customerUpdateOrderResponse }}</div>
-        </div>
-
-        <div class="endpoint">
-          <h3>Delete Order</h3>
-          <div class="form-group">
-            <label>Order ID:</label>
-            <input v-model="customerDeleteOrderId" type="number">
-          </div>
-          <button @click="customerDeleteOrder" class="action-button delete">Delete Order</button>
-          <div class="response">{{ customerDeleteOrderResponse }}</div>
         </div>
       </div>
 
       <!-- Suppliers View -->
       <div v-if="customerTab === 'suppliers'" class="tab-content">
+        <!-- Get All Suppliers -->
         <div class="endpoint">
           <h3>Find Suppliers</h3>
-          <div class="form-group">
-            <label>Category:</label>
-            <input v-model="customerSupplierCategory">
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="customerSuppliersFilter.okpd2">
+                <option value="">All</option>
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKFS:</label>
+              <select v-model="customerSuppliersFilter.okfs">
+                <option value="">All</option>
+                <option v-for="(label, value) in okfsChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>OKOPF:</label>
+              <select v-model="customerSuppliersFilter.okopf">
+                <option value="">All</option>
+                <option v-for="(label, value) in okopfChoices" :value="value">{{ label }}</option>
+              </select>
+            </div>
           </div>
-          <button @click="customerGetSuppliers" class="action-button">Search</button>
-          <div class="response">{{ customerSuppliersResponse }}</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Risk Level:</label>
+              <select v-model="customerSuppliersFilter.risk_level">
+                <option value="">All</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Search:</label>
+              <input v-model="customerSuppliersFilter.search" placeholder="Name, INN, or OGRN">
+            </div>
+          </div>
+          <button @click="customerGetSuppliers" class="action-button">Search Suppliers</button>
+          <div class="response">
+            <table class="data-table" v-if="customerSuppliersResponse.results">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>INN</th>
+                  <th>OKFS</th>
+                  <th>Risk Level</th>
+                  <th>Categories</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="supplier in customerSuppliersResponse.results" :key="supplier.id">
+                  <td>{{ supplier.full_name }}</td>
+                  <td>{{ supplier.inn }}</td>
+                  <td>{{ supplier.okfs }}</td>
+                  <td :class="`risk-${supplier.index_due_diligence_word?.toLowerCase() || 'unknown'}`">
+                    {{ supplier.index_due_diligence_word || 'N/A' }}
+                  </td>
+                  <td>{{ supplier.okpd2_categories?.join(', ') || 'N/A' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ customerSuppliersResponse }}</pre>
+          </div>
         </div>
       </div>
 
       <!-- Recommendations -->
       <div v-if="customerTab === 'recommendations'" class="tab-content">
+        <!-- Order Recommendations -->
         <div class="endpoint">
           <h3>Get Order Recommendations</h3>
           <div class="form-group">
             <label>Order ID:</label>
             <input v-model="customerRecommendationOrderId" type="number">
           </div>
-          <button @click="customerGetOrderRecommendations" class="action-button">Get Recommendations</button>
-          <div class="response">{{ customerOrderRecommendationsResponse }}</div>
-        </div>
-
-        <div class="endpoint">
-          <h3>Get General Recommendations</h3>
-          <div class="form-group">
-            <label>Product Category:</label>
-            <input v-model="customerRecommendationCategory">
-          </div>
           <div class="form-group">
             <label>Top Only:</label>
             <input v-model="customerRecommendationTopOnly" type="checkbox">
           </div>
+          <button @click="customerGetOrderRecommendations" class="action-button">Get Recommendations</button>
+          <div class="response">
+            <table class="data-table" v-if="customerOrderRecommendationsResponse.results">
+              <thead>
+                <tr>
+                  <th>Supplier</th>
+                  <th>INN</th>
+                  <th>Score</th>
+                  <th>Risk Level</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="rec in customerOrderRecommendationsResponse.results" :key="rec.supplier.id">
+                  <td>{{ rec.supplier.full_name }}</td>
+                  <td>{{ rec.supplier.inn }}</td>
+                  <td>{{ rec.score.toFixed(2) }}</td>
+                  <td :class="`risk-${rec.supplier.index_due_diligence_word?.toLowerCase() || 'unknown'}`">
+                    {{ rec.supplier.index_due_diligence_word || 'N/A' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ customerOrderRecommendationsResponse }}</pre>
+          </div>
+        </div>
+
+        <!-- General Recommendations -->
+        <div class="endpoint">
+          <h3>Get General Recommendations</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>OKPD2:</label>
+              <select v-model="customerGeneralRecommendationData.okpd2">
+                <option value="29.10">29.10</option>
+                <option value="29.20">29.20</option>
+                <option value="29.31">29.31</option>
+                <option value="29.32">29.32</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Region:</label>
+              <select v-model="customerGeneralRecommendationData.region">
+                <option v-for="region in deliveryRegions" :value="region">{{ region }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Law Type:</label>
+              <select v-model="customerGeneralRecommendationData.law_type">
+                <option value="44_FZ">44-ФЗ</option>
+                <option value="223_FZ">223-ФЗ</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Top Only:</label>
+              <input v-model="customerGeneralRecommendationData.top_only" type="checkbox">
+            </div>
+          </div>
           <button @click="customerGetGeneralRecommendations" class="action-button">Get Recommendations</button>
-          <div class="response">{{ customerGeneralRecommendationsResponse }}</div>
+          <div class="response">
+            <table class="data-table" v-if="customerGeneralRecommendationsResponse.results">
+              <thead>
+                <tr>
+                  <th>Supplier</th>
+                  <th>INN</th>
+                  <th>Score</th>
+                  <th>Risk Level</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="rec in customerGeneralRecommendationsResponse.results" :key="rec.supplier.id">
+                  <td>{{ rec.supplier.full_name }}</td>
+                  <td>{{ rec.supplier.inn }}</td>
+                  <td>{{ rec.score.toFixed(2) }}</td>
+                  <td :class="`risk-${rec.supplier.index_due_diligence_word?.toLowerCase() || 'unknown'}`">
+                    {{ rec.supplier.index_due_diligence_word || 'N/A' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <pre v-else>{{ customerGeneralRecommendationsResponse }}</pre>
+          </div>
         </div>
       </div>
     </div>
@@ -431,28 +985,109 @@
         registerCategories: '',
         registerResponse: '',
         
-        adminUpdateUserId: '',
-        adminUpdateUserData: '',
-        adminUpdateUserResponse: '',
+        // Users Management
+        adminUsersFilter: {
+          role: '',
+          search: '',
+          is_active: '',
+          ordering: 'id'
+        },
+        adminUsersResponse: {},
+        currentEditUser: null,
         adminDeleteUserId: '',
         adminDeleteUserResponse: '',
-        adminCreateOrderData: '',
+
+        // Orders Management
+        adminOrdersFilter: {
+          status: '',
+          customer_id: '',
+          okpd2: '',
+          delivery_region: '',
+          law_type: '',
+          ordering: 'id'
+        },
+        adminCreateOrderCustomerId: '',
+        adminCreateOrderOkpd2: '29.10',
+        adminCreateOrderDescription: '',
+        adminCreateOrderContractAmount: 0,
+        adminCreateOrderDeliveryRegion: 'Москва',
+        adminCreateOrderLawType: '44_FZ',
         adminCreateOrderResponse: '',
-        adminUpdateOrderId: '',
-        adminUpdateOrderData: '',
-        adminUpdateOrderResponse: '',
+        adminOrdersResponse: {},
+        currentEditOrder: null,
         adminDeleteOrderId: '',
         adminDeleteOrderResponse: '',
-        adminCreateSupplierData: '',
+
+        // Suppliers Management
+        adminSuppliersFilter: {
+          is_verified: '',
+          okfs: '',
+          okopf: '',
+          search: '',
+          risk_level: ''
+        },
+        adminSuppliersResponse: '',
+        adminCreateSupplierUserId: '',
+        adminCreateSupplierFullName: '',
+        adminCreateSupplierInn: '',
+        adminCreateSupplierOgrn: '',
+        adminCreateSupplierOkfs: 'Частная собственность',
+        adminCreateSupplierOkopf: 'Общества с ограниченной ответственностью',
+        adminCreateSupplierOkpd2: '',
         adminCreateSupplierResponse: '',
-        adminUpdateSupplierId: '',
-        adminUpdateSupplierData: '',
-        adminUpdateSupplierResponse: '',
+        currentEditSupplier: null,
+        adminSupplierResponse: {},
         adminDeleteSupplierId: '',
         adminDeleteSupplierResponse: '',
+
+        // Recommendations
         adminRecommendationOrderId: '',
         adminRecommendationAlgorithm: 'weighted',
+        adminRecommendationTopOnly: false,
         adminRecommendationsResponse: '',
+
+        // Constants from models
+        deliveryRegions: [
+          "Алтайский край", "Амурская область", "Архангельская область", "Архангельская область", "Байконур", "Белгородская область", 
+          "Брянская область", "Владимирская область", "Волгоградская область", "Вологодская область", "Воронежская область", 
+          "Донецкая Народная Республика", "Еврейская автономная область", "Забайкальский край", "Запорожская область", "Ивановская область", 
+          "Иркутская область", "Кабардино-Балкарская Республика", "Калининградская область", "Калужская область", "Камчатский край", 
+          "Карачаево-Черкесская Республика", "Кемеровская область - Кузбасс", "Кировская область", "Костромская область", "Краснодарский край", 
+          "Красноярский край", "Курганская область", "Курская область", "Ленинградская область", "Липецкая область", "Луганская Народная Республика", 
+          "Магаданская область", "Москва", "Московская область", "Мурманская область", "Ненецкий автономный округ (Архангельская область)", 
+          "Нижегородская область", "Новгородская область", "Новосибирская область", "Омская область", "Оренбургская область", "Орловская область", "Пензенская область", 
+          "Пермский край", "Приморский край", "Псковская область", "Республика Адыгея (Адыгея)", "Республика Алтай", 
+          "Республика Башкортостан", "Республика Бурятия", "Республика Дагестан", "Республика Ингушетия", "Республика Калмыкия", 
+          "Республика Карелия", "Республика Коми", "Республика Крым", "Республика Марий Эл", "Республика Мордовия", 
+          "Республика Саха (Якутия)", "Республика Северная Осетия-Алания", "Республика Татарстан (Татарстан)", 
+          "Республика Тыва", "Республика Хакасия", "Ростовская область", "Рязанская область", "Самарская область", "Санкт-Петербург", 
+          "Саратовская область", "Сахалинская область", "Свердловская область", 
+          "Севастополь", "Смоленская область", "Ставропольский край", "Тамбовская область", 
+          "Тверская область", "Томская область", "Тульская область", "Тюменская область", 
+          "Удмуртская Республика", "Ульяновская область", "Хабаровский край", 
+          "Ханты-Мансийский автономный округ - Югра (Тюменская область)", "Херсонская область", "Челябинская область", 
+          "Чеченская Республика", "Чувашская Республика - Чувашия", "Чукотский автономный округ", 
+          "Ямало-Ненецкий автономный округ (Тюменская область)", "Ярославская область"
+        ],
+
+        okfsChoices: {
+          "Частная собственность": "Частная собственность",
+          "Государственная собственность": "Государственная собственность",
+          "Индивидуальные предприниматели": "Индивидуальные предприниматели",
+          "Собственность иностранных граждан и лиц без гражданства": "Собственность иностранных граждан и лиц без гражданства",
+          "Иная смешанная российская собственность": "Иная смешанная российская собственность", 
+          "Совместная частная и иностранная собственность": "Совместная частная и иностранная собственность",
+          "Федеральная собственность": "Федеральная собственность"
+        },
+
+        okopfChoices: {
+          "Общества с ограниченной ответственностью": "Общества с ограниченной ответственностью",
+          "Акционерные общества": "Акционерные общества", 
+          "Индивидуальные предприниматели": "Индивидуальные предприниматели",
+          "Закрытые акционерные общества": "Закрытые акционерные общества", 
+          "Открытые акционерные общества": "Открытые акционерные общества",
+          "Казенные учреждения": "Казенные учреждения"
+        },
 
         // Supplier data
         supplierRegisterName: '',
@@ -462,17 +1097,44 @@
         supplierRegisterResponse: '',
 
         // Customer data
-        customerUpdateOrderId: '',
-        customerUpdateOrderData: '',
-        customerUpdateOrderResponse: '',
-        customerDeleteOrderId: '',
-        customerDeleteOrderResponse: '',
+        customerTab: 'orders',
+        customerOrdersFilter: {
+          status: '',
+          okpd2: ''
+        },
+        customerOrdersResponse: {},
+        customerCurrentEditOrder: null,
+        
+        customerCreateOrderData: {
+          okpd2: '29.10',
+          description: '',
+          contract_amount: 0,
+          delivery_region: 'Москва',
+          law_type: '44_FZ'
+        },
         customerCreateOrderResponse: '',
+        customerUpdateOrderResponse: '',
+        
+        customerSuppliersFilter: {
+          okpd2: '',
+          okfs: '',
+          okopf: '',
+          risk_level: '',
+          search: ''
+        },
+        customerSuppliersResponse: {},
+        
         customerRecommendationOrderId: '',
-        customerOrderRecommendationsResponse: '',
-        customerRecommendationCategory: '',
         customerRecommendationTopOnly: false,
-        customerGeneralRecommendationsResponse: ''
+        customerOrderRecommendationsResponse: {},
+        
+        customerGeneralRecommendationData: {
+          okpd2: '29.10',
+          region: 'Москва',
+          law_type: '44_FZ',
+          top_only: false
+        },
+        customerGeneralRecommendationsResponse: {}
       }
     },
 
@@ -540,69 +1202,164 @@
         }
       },
       
-      async adminUpdateUser() {
-        this.adminUpdateUserResponse = await this.makeRequest(
-          'PUT',
-          `/api/users/${this.adminUpdateUserId}/`,
-          JSON.parse(this.adminUpdateUserData || '{}')
-        );
+      // Admin: Users
+      async adminGetUsers() {
+        const query = Object.entries(this.adminUsersFilter)
+          .filter(([_, value]) => value !== '')
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+        
+        this.adminUsersResponse = await this.makeRequest('GET', `/users/?${query}`);
       },
+
+      loadUserForEdit(user) {
+        this.currentEditUser = JSON.parse(JSON.stringify(user));
+      },
+
+      async adminUpdateUser() {
+        try {
+          const response = await this.makeRequest(
+            'PUT',
+            `/users/${this.currentEditUser.id}/`,
+            {
+              email: this.currentEditUser.email,
+              name: this.currentEditUser.name,
+              role: this.currentEditUser.role,
+              is_active: this.currentEditUser.is_active,
+              is_staff: this.currentEditUser.is_staff,
+              is_superuser: this.currentEditUser.is_superuser
+            }
+          );
+          this.adminUpdateUserResponse = "User updated successfully!";
+          await this.adminGetUsers();
+        } catch (error) {
+          this.adminUpdateUserResponse = `Error: ${error.message}`;
+        }
+      },
+
       async adminDeleteUser() {
         this.adminDeleteUserResponse = await this.makeRequest(
           'DELETE',
-          `/api/users/${this.adminDeleteUserId}/`
+          `/users/${this.adminDeleteUserId}/`
         );
       },
+
+      // Admin: Orders
+      async adminGetOrders() {
+        const query = Object.entries(this.adminOrdersFilter)
+          .filter(([_, value]) => value !== '')
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+        
+        this.adminOrdersResponse = await this.makeRequest('GET', `/orders/?${query}`);
+      },
+
       async adminCreateOrder() {
         this.adminCreateOrderResponse = await this.makeRequest(
           'POST',
-          '/api/orders/',
-          JSON.parse(this.adminCreateOrderData || '{}')
-        );
-      },
-      async adminUpdateOrder() {
-        this.adminUpdateOrderResponse = await this.makeRequest(
-          'PUT',
-          `/api/orders/${this.adminUpdateOrderId}/`,
-          JSON.parse(this.adminUpdateOrderData || '{}')
-        );
-      },
-      async adminDeleteOrder() {
-        this.adminDeleteOrderResponse = await this.makeRequest(
-          'DELETE',
-          `/api/orders/${this.adminDeleteOrderId}/`
-        );
-      },
-      async adminCreateSupplier() {
-        this.adminCreateSupplierResponse = await this.makeRequest(
-          'POST',
-          '/api/suppliers/',
-          JSON.parse(this.adminCreateSupplierData || '{}')
-        );
-      },
-      async adminUpdateSupplier() {
-        this.adminUpdateSupplierResponse = await this.makeRequest(
-          'PUT',
-          `/api/suppliers/${this.adminUpdateSupplierId}/`,
-          JSON.parse(this.adminUpdateSupplierData || '{}')
-        );
-      },
-      async adminDeleteSupplier() {
-        this.adminDeleteSupplierResponse = await this.makeRequest(
-          'DELETE',
-          `/api/suppliers/${this.adminDeleteSupplierId}/`
-        );
-      },
-      async adminGetRecommendations() {
-        this.adminRecommendationsResponse = await this.makeRequest(
-          'POST',
-          '/api/recommendation',
+          '/orders/',
           {
-            order_id: this.adminRecommendationOrderId,
-            algorithm: this.adminRecommendationAlgorithm
+            customer: this.adminCreateOrderCustomerId,
+            okpd2: this.adminCreateOrderOkpd2,
+            description: this.adminCreateOrderDescription,
+            contract_amount: this.adminCreateOrderContractAmount,
+            delivery_region: this.adminCreateOrderDeliveryRegion,
+            law_type: this.adminCreateOrderLawType
           }
         );
       },
+
+      loadOrderForEdit(order) {
+        this.currentEditOrder = JSON.parse(JSON.stringify(order));
+      },
+      
+      async adminUpdateOrder() {
+        try {
+          const response = await this.makeRequest(
+            'PUT',
+            `/orders/${this.currentEditOrder.id}/`,
+            {
+              okpd2: this.currentEditOrder.okpd2,
+              description: this.currentEditOrder.description,
+              contract_amount: this.currentEditOrder.contract_amount,
+              delivery_region: this.currentEditOrder.delivery_region,
+              law_type: this.currentEditOrder.law_type,
+              status: this.currentEditOrder.status
+            }
+          );
+          this.adminUpdateOrderResponse = "Order updated successfully!";
+          await this.adminGetOrders(); // Refresh the list
+        } catch (error) {
+          this.adminUpdateOrderResponse = `Error: ${error.message}`;
+        }
+      },
+
+      async adminDeleteOrder() {
+        this.adminDeleteOrderResponse = await this.makeRequest(
+          'DELETE',
+          `/orders/${this.adminDeleteOrderId}/`
+        );
+      },
+
+      // Admin: Suppliers
+      async adminGetSuppliers() {
+        const query = Object.entries(this.adminSuppliersFilter)
+          .filter(([_, value]) => value !== '')
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+        
+        this.adminSuppliersResponse = await this.makeRequest('GET', `/suppliers/?${query}`);
+      },
+
+      loadSupplierForEdit(supplier) {
+        this.currentEditSupplier = JSON.parse(JSON.stringify(supplier));
+      },
+
+      async adminUpdateSupplier() {
+        try {
+          const response = await this.makeRequest(
+            'PUT',
+            `/suppliers/${this.currentEditSupplier.id}/`,
+            {
+              full_name: this.currentEditSupplier.full_name,
+              short_name: this.currentEditSupplier.short_name,
+              inn: this.currentEditSupplier.inn,
+              ogrn: this.currentEditSupplier.ogrn,
+              okfs: this.currentEditSupplier.okfs,
+              okopf: this.currentEditSupplier.okopf,
+              email: this.currentEditSupplier.email,
+              leader: this.currentEditSupplier.leader,
+              okpd2_categories: this.currentEditSupplier.okpd2_categories,
+              is_verified: this.currentEditSupplier.is_verified,
+              index_due_diligence: this.currentEditSupplier.index_due_diligence
+            }
+          );
+          this.adminUpdateSupplierResponse = "Supplier updated successfully!";
+          await this.adminGetSuppliers(); // Refresh the list
+        } catch (error) {
+          this.adminUpdateSupplierResponse = `Error: ${error.message}`;
+        }
+      },
+
+      async adminDeleteSupplier() {
+        this.adminDeleteSupplierResponse = await this.makeRequest(
+          'DELETE',
+          `/suppliers/${this.adminDeleteSupplierI}/`
+        );
+      },
+
+      // Admin: Recommendations
+      async adminGetRecommendations() {
+        this.adminRecommendationsResponse = await this.makeRequest(
+          'POST',
+          '/recommendation',
+          {
+            order_id: this.adminRecommendationOrderId,
+            algorithm: this.adminRecommendationAlgorithm,
+            top_only: this.adminRecommendationTopOnly
+          }
+        );
+      }, 
 
       // Supplier methods
       async supplierRegister() {
@@ -620,40 +1377,98 @@
       },
 
       // Customer methods
+      async customerGetOrders() {
+        const query = Object.entries(this.customerOrdersFilter)
+          .filter(([_, value]) => value !== '')
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+        
+        this.customerOrdersResponse = await this.makeRequest('GET', `/orders/?${query}`);
+      },
+
+      async customerCreateOrder() {
+        try {
+          this.customerCreateOrderResponse = await this.makeRequest(
+            'POST',
+            '/orders/',
+            this.customerCreateOrderData
+          );
+          await this.customerGetOrders(); // Refresh the list
+        } catch (error) {
+          this.customerCreateOrderResponse = `Error: ${error.message}`;
+        }
+      },
+
+      loadCustomerOrderForEdit(order) {
+        this.customerCurrentEditOrder = JSON.parse(JSON.stringify(order));
+      },
+
+      cancelCustomerEdit() {
+        this.customerCurrentEditOrder = null;
+      },
+
       async customerUpdateOrder() {
-        this.customerUpdateOrderResponse = await this.makeRequest(
-          'PUT',
-          `/api/orders/${this.customerUpdateOrderId}/`,
-          JSON.parse(this.customerUpdateOrderData || '{}')
-        );
+        try {
+          this.customerUpdateOrderResponse = await this.makeRequest(
+            'PUT',
+            `/orders/${this.customerCurrentEditOrder.id}/`,
+            {
+              okpd2: this.customerCurrentEditOrder.okpd2,
+              description: this.customerCurrentEditOrder.description,
+              contract_amount: this.customerCurrentEditOrder.contract_amount,
+              delivery_region: this.customerCurrentEditOrder.delivery_region,
+              law_type: this.customerCurrentEditOrder.law_type
+            }
+          );
+          await this.customerGetOrders(); // Refresh the list
+        } catch (error) {
+          this.customerUpdateOrderResponse = `Error: ${error.message}`;
+        }
       },
-      async customerDeleteOrder() {
-        this.customerDeleteOrderResponse = await this.makeRequest(
-          'DELETE',
-          `/api/orders/${this.customerDeleteOrderId}/`
-        );
+
+      async confirmDeleteOrder(orderId) {
+        if (confirm('Are you sure you want to delete this order?')) {
+          const response = await this.makeRequest('DELETE', `/orders/${orderId}/`);
+          if (!response.error) {
+            await this.customerGetOrders(); // Refresh the list
+          }
+        }
       },
+
+      async customerGetSuppliers() {
+        const query = Object.entries(this.customerSuppliersFilter)
+          .filter(([_, value]) => value !== '')
+          .map(([key, value]) => `${key}=${value}`)
+          .join('&');
+        
+        this.customerSuppliersResponse = await this.makeRequest('GET', `/suppliers/?${query}`);
+      },
+
       async customerGetOrderRecommendations() {
-        this.customerOrderRecommendationsResponse = await this.makeRequest(
-          'GET',
-          `/api/orders/${this.customerRecommendationOrderId}/recommend_suppliers/`
-        );
-      },
-      async customerGetGeneralRecommendations() {
         const endpoint = this.customerRecommendationTopOnly 
-          ? '/api/recomendation?top_only=true' 
-          : '/api/recomendation';
+          ? `/orders/${this.customerRecommendationOrderId}/recommend_suppliers/?top_only=true`
+          : `/orders/${this.customerRecommendationOrderId}/recommend_suppliers/`;
+        
+        this.customerOrderRecommendationsResponse = await this.makeRequest('GET', endpoint);
+      },
+
+      async customerGetGeneralRecommendations() {
+        const endpoint = this.customerGeneralRecommendationData.top_only 
+          ? '/recomendation?top_only=true'
+          : '/recomendation';
         
         this.customerGeneralRecommendationsResponse = await this.makeRequest(
           'POST',
           endpoint,
           {
-            product_category: this.customerRecommendationCategory
+            okpd2: this.customerGeneralRecommendationData.okpd2,
+            region: this.customerGeneralRecommendationData.region,
+            law_type: this.customerGeneralRecommendationData.law_type
           }
         );
       },
 
-      // Enhanced makeRequest with error handling
+      // make request
       async makeRequest(method, endpoint, body = null, useAuth = true) {
         try {
           const headers = {
